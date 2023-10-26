@@ -1,0 +1,11 @@
+# Editor
+.vscode/*
+!.vscode/launch.json
+!.vscode/*.code-snippets
+
+# Python
+__pycache__
+venv
+
+# Custom
+**/datasets/**/*
