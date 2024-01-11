@@ -1,27 +1,16 @@
 from pathlib import Path, PurePath
+
 import pandas as pd
 from IPython.display import display
-from util import get_hash
+from util import column_types, get_hash
 
-# NodeID: Name, ParentID, Type, Size, Path, LastWriteTime, LastAccessTime
-column_types = {
-    "Name": str,
-    "ParentID": str,
-    "Type": str,
-    "Size": "Int64",
-    "Path": str,
-    "LastAccessTime": "datetime64[ns]",
-}
+lastaccess_types = column_types.copy()
+del lastaccess_types["LastWriteTime"]
 
 data_dir = Path(__file__).parent.parent / "datasets"
 
 
-def accesstime_df() -> pd.DataFrame:
-    df_input = pd.read_csv(
-        data_dir / "lastaccesstime_test.csv",
-        parse_dates=["LastAccessTime"],
-        date_format=f"%d.%m.%Y %H:%M:%S",
-    )
+def accesstime_df(df_input: pd.DataFrame) -> pd.DataFrame:
     full_path = df_input["FullName"].map(lambda p: PurePath(p))
     df = pd.DataFrame(
         {
@@ -35,9 +24,14 @@ def accesstime_df() -> pd.DataFrame:
         }
     )
     df = df.set_index("NodeID")
-    display(df)
-    df.to_csv(data_dir / "result_lastaccess.csv", index=True, index_label="NodeID")
+    return df
 
 
 if __name__ == "__main__":
-    accesstime_df()
+    df_input = pd.read_csv(
+        data_dir / "lastaccesstime.csv",
+        parse_dates=["LastAccessTime"],
+    )
+    df = accesstime_df(df_input)
+    display(df)
+    df.to_csv(data_dir / "result_lastaccess.csv", index=True, index_label="NodeID")

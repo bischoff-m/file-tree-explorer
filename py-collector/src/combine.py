@@ -1,19 +1,9 @@
 from pathlib import Path, PurePath
+
 import pandas as pd
 from IPython.display import display
 from tqdm import tqdm
-
-from util import get_hash
-
-column_types = {
-    "Name": str,  # Required
-    "ParentID": str,  # Required
-    "Path": str,  # Required
-    "Size": "Int64",  # Required, may be any number >= 0
-    "Type": str,  # May be "File", "Directory" or None/NaN
-    "LastAccessTime": "datetime64[ns]",  # Optional
-    "LastWriteTime": "datetime64[ns]",  # Optional
-}
+from util import column_types, get_hash
 
 
 def join(df1: pd.DataFrame, df2: pd.DataFrame, verbose: bool = False) -> pd.DataFrame:
@@ -22,6 +12,10 @@ def join(df1: pd.DataFrame, df2: pd.DataFrame, verbose: bool = False) -> pd.Data
 
     # Check that no values are missing for required columns
     for col in ["Name", "ParentID", "Size", "Path"]:
+        with pd.option_context("display.max_rows", None, "display.max_columns", None):
+            display(df1[df1[col].isna()])
+        with pd.option_context("display.max_rows", None, "display.max_columns", None):
+            display(df2[df2[col].isna()])
         assert not df1[col].isna().any(), f"Missing values in {col} in df1"
         assert not df2[col].isna().any(), f"Missing values in {col} in df2"
 
@@ -79,7 +73,7 @@ def join(df1: pd.DataFrame, df2: pd.DataFrame, verbose: bool = False) -> pd.Data
             name = parent.name
             if name == "":
                 name = current_path.anchor
-            if parent_id not in df.index:
+            if parent_id not in df.index and parent_id not in df_parents.index:
                 df_parents.loc[parent_id] = [
                     parent.name,
                     get_hash(parent.parent),
@@ -88,16 +82,21 @@ def join(df1: pd.DataFrame, df2: pd.DataFrame, verbose: bool = False) -> pd.Data
                     "Directory",
                 ]
             else:
-                if df.loc[parent_id, "Type"] is None:
+                if parent_id in df.index and df.loc[parent_id, "Type"] is None:
                     df.loc[parent_id, "Type"] = "Directory"
                 # Stop when the parent is already in the dataframe
                 break
 
     # Join the parent directories to the dataframe
     df = pd.concat([df_parents, df])
-    levels = df["Path"].map(lambda p: len(PurePath(p).parts))
+
+    # Post conditions
+    print("Testing post conditions")
+    assert df["ParentID"].notna().all(), "ParentID is NaN"
+    assert df["ParentID"].isin(df.index).all(), "ParentID not in index"
 
     # Calculate Size, LastAccessTime, LastWriteTime for directories
+    levels = df["Path"].map(lambda p: len(PurePath(p).parts))
     for level in tqdm(
         range(levels.max(), 0, -1),
         desc="Calculating Size, LastAccessTime, LastWriteTime",
@@ -148,27 +147,27 @@ def join(df1: pd.DataFrame, df2: pd.DataFrame, verbose: bool = False) -> pd.Data
             # Aggregate the values
             df.loc[parent_ids, col] = new_values(parent_ids, groupby_parent)
 
+    df["Type"].fillna("Unknown", inplace=True)
     return df
 
 
 if __name__ == "__main__":
     data_dir = Path(__file__).parent.parent / "datasets"
+    # Required in the sense that the columns must be in df.columns
     required_columns = ["Name", "ParentID", "Path", "Size", "Type"]
     optional_columns = ["LastAccessTime", "LastWriteTime"]
+    options = {
+        "index_col": "NodeID",
+        "dtype": {col: column_types[col] for col in required_columns},
+        "keep_default_na": False,
+        "na_values": [""],
+    }
 
     df1 = pd.read_csv(
-        data_dir / "result_lastaccess.csv",
-        index_col="NodeID",
-        parse_dates=["LastAccessTime"],
-        date_format=f"%d.%m.%Y %H:%M:%S",
-        dtype={col: column_types[col] for col in required_columns},
+        data_dir / "result_lastaccess.csv", parse_dates=["LastAccessTime"], **options
     )
     df2 = pd.read_csv(
-        data_dir / "result_lastwrite.csv",
-        index_col="NodeID",
-        parse_dates=["LastWriteTime"],
-        date_format=f"%d.%m.%Y %H:%M:%S",
-        dtype={col: column_types[col] for col in required_columns},
+        data_dir / "result_lastwrite.csv", parse_dates=["LastWriteTime"], **options
     )
 
     verbose = True

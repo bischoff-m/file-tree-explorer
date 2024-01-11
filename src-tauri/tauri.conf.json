@@ -12,7 +12,10 @@
   },
   "tauri": {
     "allowlist": {
-      "all": false
+      "all": false,
+      "window": {
+        "maximize": true
+      }
     },
     "bundle": {
       "active": true,
@@ -56,10 +59,11 @@
     "windows": [
       {
         "fullscreen": false,
-        "height": 600,
+        "height": 800,
         "resizable": true,
         "title": "File Explorer",
-        "width": 800
+        "width": 1200,
+        "maximized": true
       }
     ]
   }

@@ -1,39 +1,26 @@
 # pyright: reportUndefinedVariable=false
 
-from sly import Parser
 from pathlib import PurePath
+
 import pandas as pd
 from lastwrite_lexer import FileListLexer
-from util import get_hash
+from sly import Parser
+from util import column_types, get_hash
 
 
 class FileListParser(Parser):
-    # debugfile = "parser.out"
     # Get the token list from the lexer (required)
     tokens = FileListLexer.tokens
-
-    # NodeID: Name, ParentID, Type, Size, Path, LastWriteTime, LastAccessTime
-    column_types = {
-        "Name": str,
-        "ParentID": str,
-        "Type": str,
-        "Size": "Int64",
-        "Path": str,
-        "LastWriteTime": "datetime64[ns]",
-    }
+    # Omit LastAccessTime column from column_types
+    lastwrite_types = column_types.copy()
+    del lastwrite_types["LastAccessTime"]
 
     @_("block")
     def blocks(self, p):
-        # Check if blocks contains the special numbers -684402285 and 3610565011
-        if p.block["Size"].isin([-684402285, 3610565011]).any():
-            print(f"Found special number in blocks: {p.block['Size']}")
         return p.block
 
     @_("blocks block")
     def blocks(self, p):
-        # Check if blocks contains the special numbers -684402285 and 3610565011
-        if p.block["Size"].isin([-684402285, 3610565011]).any():
-            print(f"Found special number in blocks: {p.block['Size']}")
         # Join the list of blocks
         return pd.concat([p.blocks, p.block])
 
@@ -63,30 +50,28 @@ class FileListParser(Parser):
         )
         df = pd.concat([df_dir, df])
 
-        df = df.reindex(columns=self.column_types.keys())
-        df = df.astype(self.column_types)
+        df = df.reindex(columns=self.lastwrite_types.keys())
+        df = df.astype(self.lastwrite_types)
 
         return df
 
     @_("file_row")
     def file_list(self, p):
-        return pd.DataFrame([p.file_row], columns=self.column_types.keys())
+        return pd.DataFrame([p.file_row], columns=self.lastwrite_types.keys())
 
     @_("file_list file_row")
     def file_list(self, p):
         return pd.concat(
             [
                 p.file_list,
-                pd.DataFrame([p.file_row], columns=self.column_types.keys()),
+                pd.DataFrame([p.file_row], columns=self.lastwrite_types.keys()),
             ]
         )
 
     @_("skip_mode DATETIME NUMBER FILENAME")
     def file_row(self, p):
-        if int(p.NUMBER) == -684402285 or int(p.NUMBER) == 3610565011:
-            print(f"Found special number in file_row: {p.NUMBER} {p.FILENAME}")
         return pd.Series(
-            index=self.column_types.keys(),
+            index=self.lastwrite_types.keys(),
             data={
                 "LastWriteTime": p.DATETIME,
                 "Size": p.NUMBER,
